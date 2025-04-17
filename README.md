@@ -13,18 +13,18 @@ Pada soal ini, kita diminta untuk membuat sebuah program C untuk memproses file-
 
 Penjelasan code:
           
-  #include <stdio.h>
-  #include <stdlib.h>
-  #include <string.h>
-  #include <unistd.h>
-  #include <sys/stat.h>
-  #include <dirent.h>
-  #include <ctype.h>
-  #include <sys/wait.h>
-  #include <fcntl.h>
-  #include <time.h>
-  #define DOWNLOAD_URL "https://drive.usercontent.google.com/u/0/uc?id=1xFn1OBJUuSdnApDseEczKhtNzyGekauK&export=download"
-  #define ZIP_FILE "Clues.zip"
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <string.h>
+            #include <unistd.h>
+            #include <sys/stat.h>
+            #include <dirent.h>
+            #include <ctype.h>
+            #include <sys/wait.h>
+            #include <fcntl.h>
+            #include <time.h>
+            #define DOWNLOAD_URL "https://drive.usercontent.google.com/u/0/uc?id=1xFn1OBJUuSdnApDseEczKhtNzyGekauK&export=download"
+            #define ZIP_FILE "Clues.zip"
 
 Bagian ini mengimpor berbagai library yang diperlukan:
 
