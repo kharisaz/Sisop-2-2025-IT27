@@ -8,6 +8,8 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <time.h>
+#define DOWNLOAD_URL "https://drive.usercontent.google.com/u/0/uc?id=1xFn1OBJUuSdnApDseEczKhtNzyGekauK&export=download"
+#define ZIP_FILE "Clues.zip"
 
 // Function to display the directory structure
 void print_directory_structure() {
@@ -31,9 +33,6 @@ void print_directory_structure() {
         perror("fork");
     }
 }
-
-#define DOWNLOAD_URL "https://drive.usercontent.google.com/u/0/uc?id=1xFn1OBJUuSdnApDseEczKhtNzyGekauK&export=download"
-#define ZIP_FILE "Clues.zip"
 
 // Function to check if a directory exists
 int directory_exists(const char *path) {
