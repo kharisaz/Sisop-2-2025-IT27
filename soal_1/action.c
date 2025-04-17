@@ -1,290 +1,431 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
-#include <ctype.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <ctype.h>
 #include <sys/wait.h>
 #include <fcntl.h>
-#include <errno.h>
+#include <time.h>
 
-#define MAX_FILES 100
-#define MAX_FILENAME 50
-#define MAX_CONTENT 1000
-#define MAX_PATH 1024  // Diperbesar untuk menghindari truncation
-#define DOWNLOAD_URL "https://drive.usercontent.google.com/u/0/uc?id=1xFn1OBJUuSdnApDseEczKhtNzyGekauK&export=download"
-#define PASSWORD_CHECK_URL "https://dragon-pw-checker.vercel.app/"
-
-void downloadAndUnzip();
-void filterFiles();
-void combineFiles();
-void decodeFile();
-void checkPassword(const char *password);
-void printUsage(char *program_name);
-void executeCommand(char *const args[]);
-int isFileExists(const char *path);
-int compare_filenames(const void *a, const void *b);
-
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        downloadAndUnzip();
-    } else if (argc == 3 && strcmp(argv[1], "-m") == 0) {
-        if (strcmp(argv[2], "Filter") == 0) {
-            filterFiles();
-        } else if (strcmp(argv[2], "Combine") == 0) {
-            combineFiles();
-        } else if (strcmp(argv[2], "Decode") == 0) {
-            decodeFile();
-        } else {
-            printUsage(argv[0]);
-        }
-    } else if (argc == 4 && strcmp(argv[1], "-m") == 0 && strcmp(argv[2], "Check") == 0) {
-        checkPassword(argv[3]);
-    } else {
-        printUsage(argv[0]);
-    }
-    return 0;
-}
-
-void printUsage(char *program_name) {
-    printf("Usage:\n");
-    printf("  %s                       - Download and unzip Clues.zip\n", program_name);
-    printf("  %s -m Filter             - Filter files\n", program_name);
-    printf("  %s -m Combine            - Combine filtered files\n", program_name);
-    printf("  %s -m Decode             - Decode combined file\n", program_name);
-    printf("  %s -m Check <password>   - Check password at %s\n", program_name, PASSWORD_CHECK_URL);
-}
-
-void executeCommand(char *const args[]) {
+// Function to display the directory structure
+void print_directory_structure() {
     pid_t pid = fork();
-    
-    if (pid == -1) {
-        perror("fork failed");
+    if (pid == 0) {
+        // Child process
+        // Redirect stdout to /dev/null to not display the actual output
+        int devnull = open("/dev/null", O_WRONLY);
+        dup2(devnull, STDOUT_FILENO);
+        close(devnull);
+        
+        // Execute tree command
+        execl("/usr/bin/tree", "tree", "--noreport", "-C", NULL);
+        perror("execl");
         exit(EXIT_FAILURE);
-    } else if (pid == 0) {
-        execvp(args[0], args);
-        perror("execvp failed");
-        exit(EXIT_FAILURE);
-    } else {
+    } else if (pid > 0) {
+        // Parent process
         int status;
         waitpid(pid, &status, 0);
-        
-        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-            fprintf(stderr, "Command failed with exit code %d\n", WEXITSTATUS(status));
-            exit(EXIT_FAILURE);
-        }
+    } else {
+        perror("fork");
     }
 }
 
-int isFileExists(const char *path) {
-    return access(path, F_OK) == 0;
+#define DOWNLOAD_URL "https://drive.usercontent.google.com/u/0/uc?id=1xFn1OBJUuSdnApDseEczKhtNzyGekauK&export=download"
+#define ZIP_FILE "Clues.zip"
+
+// Function to check if a directory exists
+int directory_exists(const char *path) {
+    struct stat st;
+    return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
 }
 
-void downloadAndUnzip() {
-    if (isFileExists("Clues")) {
+// Function to check if a file exists
+int file_exists(const char *path) {
+    struct stat st;
+    return (stat(path, &st) == 0 && S_ISREG(st.st_mode));
+}
+
+// Function to download and extract Clues
+void download_and_extract() {
+    // Check if Clues directory already exists
+    if (directory_exists("Clues")) {
         printf("Clues directory already exists. Skipping download.\n");
         return;
     }
 
     printf("Downloading Clues.zip...\n");
-    char *wget_args[] = {"wget", "-q", DOWNLOAD_URL, "-O", "Clues.zip", NULL};
-    executeCommand(wget_args);
     
-    printf("Unzipping Clues.zip...\n");
-    char *unzip_args[] = {"unzip", "-q", "Clues.zip", NULL};
-    executeCommand(unzip_args);
-    
-    printf("Cleaning up...\n");
-    if (unlink("Clues.zip") != 0) {
-        perror("Failed to delete Clues.zip");
+    // Download the file using curl
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        execl("/usr/bin/curl", "curl", "-L", "-o", ZIP_FILE, DOWNLOAD_URL, NULL);
+        perror("execl");
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        // Parent process
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            printf("Download complete. Extracting...\n");
+            
+            // Extract the ZIP file
+            pid_t unzip_pid = fork();
+            if (unzip_pid == 0) {
+                // Child process
+                execl("/usr/bin/unzip", "unzip", ZIP_FILE, NULL);
+                perror("execl");
+                exit(EXIT_FAILURE);
+            } else if (unzip_pid > 0) {
+                // Parent process
+                int unzip_status;
+                waitpid(unzip_pid, &unzip_status, 0);
+                if (WIFEXITED(unzip_status) && WEXITSTATUS(unzip_status) == 0) {
+                    printf("Extraction complete. Removing ZIP file...\n");
+                    
+                    // Remove the ZIP file
+                    if (remove(ZIP_FILE) == 0) {
+                        printf("ZIP file removed successfully.\n");
+                    } else {
+                        perror("remove");
+                    }
+                    
+                    // Make sure the Clues directory has the expected structure
+                    printf("Ensuring correct directory structure...\n");
+                } else {
+                    printf("Extraction failed.\n");
+                }
+            } else {
+                perror("fork");
+            }
+        } else {
+            printf("Download failed.\n");
+        }
+    } else {
+        perror("fork");
     }
-    
-    printf("Done! Clues extracted to Clues directory.\n");
 }
 
-void filterFiles() {
-    struct dirent *entry, *sub_entry;
-    DIR *dp, *sub_dp;
-    char path[MAX_PATH];
+// Function to check if a filename is valid (one letter or one digit)
+int is_valid_filename(const char *filename) {
+    // Get the filename without path
+    const char *base = strrchr(filename, '/');
+    if (base) {
+        base++;
+    } else {
+        base = filename;
+    }
+    
+    // Get the extension
+    const char *ext = strrchr(base, '.');
+    if (!ext) {
+        return 0;
+    }
+    
+    // Check if the filename (without extension) is exactly one character
+    if (ext - base != 1) {
+        return 0;
+    }
+    
+    // Check if the character is a letter or a digit
+    char c = base[0];
+    return (isalpha(c) || isdigit(c));
+}
 
-    if (mkdir("Filtered", 0755) == -1 && errno != EEXIST) {
-        perror("Failed to create Filtered directory");
-        exit(EXIT_FAILURE);
+// Function to filter files
+void filter_files() {
+    // Create Filtered directory if it doesn't exist
+    if (!directory_exists("Filtered")) {
+        if (mkdir("Filtered", 0755) != 0) {
+            perror("mkdir");
+            return;
+        }
+        printf("Created Filtered directory.\n");
     }
 
-    if ((dp = opendir("Clues")) == NULL) {
-        perror("Unable to open Clues directory");
-        exit(EXIT_FAILURE);
-    }
-
-    while ((entry = readdir(dp))) {
-        if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-            snprintf(path, sizeof(path), "Clues/%s", entry->d_name);
-            if ((sub_dp = opendir(path)) == NULL) {
-                perror("Unable to open subdirectory");
-                continue;
+    // Go through each Clue directory
+    const char *clue_dirs[] = {"Clues/ClueA", "Clues/ClueB", "Clues/ClueC", "Clues/ClueD"};
+    for (int i = 0; i < 4; i++) {
+        DIR *dir = opendir(clue_dirs[i]);
+        if (!dir) {
+            printf("Failed to open directory: %s\n", clue_dirs[i]);
+            continue;
+        }
+        
+        struct dirent *entry;
+        // First, collect all filenames to process
+        char filenames[100][256];
+        int file_count = 0;
+        
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type == DT_REG) {  // Check if it's a regular file
+                strcpy(filenames[file_count], entry->d_name);
+                file_count++;
             }
-
-            while ((sub_entry = readdir(sub_dp))) {
-                if (sub_entry->d_type == DT_REG) {
-                    int name_len = strlen(sub_entry->d_name);
-                    if (name_len == 5 && strcmp(sub_entry->d_name + 1, ".txt") == 0 && isalnum(sub_entry->d_name[0])) {
-                        char src_path[MAX_PATH], dest_path[MAX_PATH];
-                        
-                        // Pengecekan panjang path sebelum menggunakan snprintf
-                        int needed_length = snprintf(NULL, 0, "Clues/%s/%s", entry->d_name, sub_entry->d_name);
-                        if (needed_length < sizeof(src_path)) {
-                            snprintf(src_path, sizeof(src_path), "Clues/%s/%s", entry->d_name, sub_entry->d_name);
-                        } else {
-                            fprintf(stderr, "Path too long: %s/%s\n", entry->d_name, sub_entry->d_name);
-                            continue;  // Skip file if path is too long
-                        }
-
-                        snprintf(dest_path, sizeof(dest_path), "Filtered/%s", sub_entry->d_name);
-                        
-                        if (rename(src_path, dest_path) != 0) {
-                            perror("Failed to move file");
-                        }
-                    }
+        }
+        closedir(dir);
+        
+        // Process all files
+        for (int j = 0; j < file_count; j++) {
+            char src_path[512];
+            snprintf(src_path, sizeof(src_path), "%s/%s", clue_dirs[i], filenames[j]);
+            
+            if (is_valid_filename(filenames[j])) {
+                // Move valid files to Filtered directory
+                char dst_path[512];
+                snprintf(dst_path, sizeof(dst_path), "Filtered/%s", filenames[j]);
+                
+                FILE *src = fopen(src_path, "r");
+                if (!src) {
+                    perror("fopen source");
+                    continue;
+                }
+                
+                FILE *dst = fopen(dst_path, "w");
+                if (!dst) {
+                    perror("fopen destination");
+                    fclose(src);
+                    continue;
+                }
+                
+                char buffer[1024];
+                size_t bytes;
+                while ((bytes = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+                    fwrite(buffer, 1, bytes, dst);
+                }
+                
+                fclose(src);
+                fclose(dst);
+                
+                // Delete the original file after copying it to Filtered
+                if (remove(src_path) == 0) {
+                    printf("Moved %s to Filtered directory and removed original.\n", filenames[j]);
+                } else {
+                    perror("remove");
+                }
+            } else {
+                // Delete invalid files
+                if (remove(src_path) == 0) {
+                    printf("Removed invalid file: %s\n", filenames[j]);
+                } else {
+                    perror("remove");
                 }
             }
-            closedir(sub_dp);
         }
     }
-    closedir(dp);
-    printf("Filtering complete. Valid files moved to Filtered directory.\n");
 }
 
+// Function to compare filenames for sorting
 int compare_filenames(const void *a, const void *b) {
     return strcmp(*(const char **)a, *(const char **)b);
 }
 
-void combineFiles() {
-    DIR *dp;
-    struct dirent *entry;
-    char *filenames[MAX_FILES];
-    int num_files = 0;
-
-    if ((dp = opendir("Filtered")) == NULL) {
-        perror("Unable to open Filtered directory");
-        exit(EXIT_FAILURE);
-    }
-
-    while ((entry = readdir(dp)) && num_files < MAX_FILES) {
-        if (entry->d_type == DT_REG) {
-            if (strlen(entry->d_name) == 5 && 
-                isalnum(entry->d_name[0]) && 
-                strcmp(entry->d_name + 1, ".txt") == 0) {
-                filenames[num_files] = strdup(entry->d_name);
-                if (!filenames[num_files]) {
-                    perror("Memory allocation failed");
-                    exit(EXIT_FAILURE);
-                }
-                num_files++;
-            }
-        }
-    }
-    closedir(dp);
-
-    // Separate numbers and letters
-    int num_count = 0, alpha_count = 0;
-    char *numbers[MAX_FILES/2], *letters[MAX_FILES/2];
-
-    for (int i = 0; i < num_files; i++) {
-        if (isdigit(filenames[i][0])) {
-            numbers[num_count++] = filenames[i];
-        } else {
-            letters[alpha_count++] = filenames[i];
-        }
-    }
-
-    // Sort each group
-    qsort(numbers, num_count, sizeof(char*), compare_filenames);
-    qsort(letters, alpha_count, sizeof(char*), compare_filenames);
-
-    // Interleave the sorted groups
-    int combined_index = 0;
-    int max_count = num_count > alpha_count ? num_count : alpha_count;
-    for (int i = 0; i < max_count; i++) {
-        if (i < num_count) {
-            filenames[combined_index++] = numbers[i];
-        }
-        if (i < alpha_count) {
-            filenames[combined_index++] = letters[i];
-        }
-    }
-
-    // Combine files
-    FILE *combined = fopen("Combined.txt", "w");
-    if (!combined) {
-        perror("Failed to create Combined.txt");
-        exit(EXIT_FAILURE);
-    }
-
-    for (int i = 0; i < num_files; i++) {
-        char path[MAX_PATH];
-        snprintf(path, sizeof(path), "Filtered/%s", filenames[i]);
-
-        FILE *fp = fopen(path, "r");
-        if (fp) {
-            char buffer[128];
-            while (fgets(buffer, sizeof(buffer), fp)) {
-                fputs(buffer, combined);
-            }
-            fclose(fp);
-            remove(path);
-        }
-        free(filenames[i]);
-    }
-    fclose(combined);
-    printf("Files combined successfully into Combined.txt\n");
-}
-
-void decodeFile() {
-    FILE *fp;
-    char content[MAX_CONTENT];
-    char decoded[MAX_CONTENT];
-
-    if ((fp = fopen("Combined.txt", "r")) == NULL) {
-        perror("Unable to open Combined.txt");
-        exit(EXIT_FAILURE);
-    }
-
-    if (fgets(content, sizeof(content), fp) == NULL) {
-        fclose(fp);
-        printf("Combined.txt is empty\n");
+// Function to combine file contents
+void combine_files() {
+    DIR *dir = opendir("Filtered");
+    if (!dir) {
+        printf("Failed to open Filtered directory.\n");
         return;
     }
-    fclose(fp);
-
-    for (int i = 0; content[i] != '\0' && i < sizeof(content) - 1; i++) {
-        char c = content[i];
-        if (c >= 'a' && c <= 'z') {
-            decoded[i] = 'a' + ((c - 'a' + 13) % 26);
-        } else if (c >= 'A' && c <= 'Z') {
-            decoded[i] = 'A' + ((c - 'A' + 13) % 26);
-        } else {
-            decoded[i] = c;
+    
+    // Collect all digit filenames and letter filenames
+    char *digit_files[100];
+    char *letter_files[100];
+    int digit_count = 0;
+    int letter_count = 0;
+    
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_REG) {
+            char *filename = strdup(entry->d_name);
+            if (isdigit(filename[0])) {
+                digit_files[digit_count++] = filename;
+            } else if (isalpha(filename[0])) {
+                letter_files[letter_count++] = filename;
+            }
         }
     }
-    decoded[strlen(content)] = '\0';
-
-    if ((fp = fopen("Decoded.txt", "w")) == NULL) {
-        perror("Unable to create Decoded.txt");
-        exit(EXIT_FAILURE);
+    
+    closedir(dir);
+    
+    // Sort the filenames
+    qsort(digit_files, digit_count, sizeof(char *), compare_filenames);
+    qsort(letter_files, letter_count, sizeof(char *), compare_filenames);
+    
+    // Open the combined file
+    FILE *combined = fopen("Combined.txt", "w");
+    if (!combined) {
+        perror("fopen Combined.txt");
+        return;
     }
-
-    fprintf(fp, "%s", decoded);
-    fclose(fp);
-
-    printf("File decoded successfully into Decoded.txt\n");
-    printf("The password is: %s\n", decoded);
-    printf("You can check this password at: %s\n", PASSWORD_CHECK_URL);
+    
+    // Combine the files in the required order (alternating digit, letter)
+    int digit_idx = 0;
+    int letter_idx = 0;
+    
+    while (digit_idx < digit_count || letter_idx < letter_count) {
+        // Process digit file
+        if (digit_idx < digit_count) {
+            char path[512];
+            snprintf(path, sizeof(path), "Filtered/%s", digit_files[digit_idx]);
+            
+            FILE *file = fopen(path, "r");
+            if (file) {
+                char buffer[1024];
+                size_t bytes;
+                while ((bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+                    fwrite(buffer, 1, bytes, combined);
+                }
+                fclose(file);
+                printf("Combined content from %s\n", digit_files[digit_idx]);
+                
+                // Delete the file
+                if (remove(path) == 0) {
+                    printf("Removed %s after combining.\n", digit_files[digit_idx]);
+                } else {
+                    perror("remove");
+                }
+                
+                digit_idx++;
+            }
+        }
+        
+        // Process letter file
+        if (letter_idx < letter_count) {
+            char path[512];
+            snprintf(path, sizeof(path), "Filtered/%s", letter_files[letter_idx]);
+            
+            FILE *file = fopen(path, "r");
+            if (file) {
+                char buffer[1024];
+                size_t bytes;
+                while ((bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+                    fwrite(buffer, 1, bytes, combined);
+                }
+                fclose(file);
+                printf("Combined content from %s\n", letter_files[letter_idx]);
+                
+                // Delete the file
+                if (remove(path) == 0) {
+                    printf("Removed %s after combining.\n", letter_files[letter_idx]);
+                } else {
+                    perror("remove");
+                }
+                
+                letter_idx++;
+            }
+        }
+    }
+    
+    fclose(combined);
+    printf("Combined all files into Combined.txt\n");
+    
+    // Free allocated memory
+    for (int i = 0; i < digit_count; i++) {
+        free(digit_files[i]);
+    }
+    for (int i = 0; i < letter_count; i++) {
+        free(letter_files[i]);
+    }
 }
 
-void checkPassword(const char *password) {
-    printf("Checking password at %s...\n", PASSWORD_CHECK_URL);
-    printf("Please visit the website and enter this password:\n");
-    printf("==> %s <==\n", password);
+// Function to decode using ROT13
+char rot13(char c) {
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+        char offset = (c >= 'a' && c <= 'z') ? 'a' : 'A';
+        return ((c - offset + 13) % 26) + offset;
+    }
+    return c;
+}
+
+// Function to decode the file
+void decode_file() {
+    FILE *combined = fopen("Combined.txt", "r");
+    if (!combined) {
+        printf("Failed to open Combined.txt\n");
+        return;
+    }
+    
+    FILE *decoded = fopen("Decoded.txt", "w");
+    if (!decoded) {
+        perror("fopen Decoded.txt");
+        fclose(combined);
+        return;
+    }
+    
+    int c;
+    while ((c = fgetc(combined)) != EOF) {
+        fputc(rot13((char)c), decoded);
+    }
+    
+    fclose(combined);
+    fclose(decoded);
+    printf("Decoded Combined.txt to Decoded.txt using ROT13\n");
+}
+
+// Function to display usage
+void display_usage() {
+    printf("Usage: ./action [-m Mode]\n");
+    printf("Modes:\n");
+    printf("  Filter   - Filter files with single letter/digit names\n");
+    printf("  Combine  - Combine filtered files into a single file\n");
+    printf("  Decode   - Decode the combined file using ROT13\n");
+    printf("  Check    - Check the password from the decoded file\n");
+    printf("Without arguments, it will download and extract the clues.\n");
+}
+
+// Function to check the password
+void check_password() {
+    // Open the decoded file
+    FILE *decoded = fopen("Decoded.txt", "r");
+    if (!decoded) {
+        printf("Failed to open Decoded.txt. Please decode the file first.\n");
+        return;
+    }
+    
+    // Read the password from the file
+    char password[256] = {0};
+    if (fgets(password, sizeof(password), decoded) != NULL) {
+        // Remove newline character if present
+        size_t len = strlen(password);
+        if (len > 0 && password[len-1] == '\n') {
+            password[len-1] = '\0';
+        }
+        
+        printf("Password found: %s\n", password);
+        printf("Please input this password at the 'lokasi' mentioned in the problem.\n");
+    } else {
+        printf("Could not read password from file.\n");
+    }
+    
+    fclose(decoded);
+}
+
+int main(int argc, char *argv[]) {
+    // Parse arguments
+    if (argc == 1) {
+        // No arguments, download and extract
+        download_and_extract();
+    } else if (argc == 3 && strcmp(argv[1], "-m") == 0) {
+        if (strcmp(argv[2], "Filter") == 0) {
+            filter_files();
+        } else if (strcmp(argv[2], "Combine") == 0) {
+            combine_files();
+        } else if (strcmp(argv[2], "Decode") == 0) {
+            decode_file();
+        } else if (strcmp(argv[2], "Check") == 0) {
+            check_password();
+        } else {
+            printf("Invalid mode: %s\n", argv[2]);
+            display_usage();
+            return 1;
+        }
+    } else {
+        display_usage();
+        return 1;
+    }
+    
+    return 0;
 }
