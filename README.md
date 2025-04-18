@@ -41,17 +41,13 @@ time.h untuk fungsi yang berhubungan dengan waktu
 DOWNLOAD_URL adalah URL untuk mengunduh file Clues.zip
 ZIP_FILE adalah nama file ZIP yang akan diunduh
 
-          // Function to display the directory structure
           void print_directory_structure() {
               pid_t pid = fork();
               if (pid == 0) {
-                  // Child process
-                  // Redirect stdout to /dev/null to not display the actual output
                   int devnull = open("/dev/null", O_WRONLY);
                   dup2(devnull, STDOUT_FILENO);
                   close(devnull);
                   
-                  // Execute tree command
                   execl("/usr/bin/tree", "tree", "--noreport", "-C", NULL);
                   perror("execl");
                   exit(EXIT_FAILURE);
@@ -70,13 +66,11 @@ Dalam proses child, output diarahkan ke /dev/null menggunakan dup2
 Kemudian perintah tree dijalankan dengan opsi --noreport dan -C (warna)
 Proses parent menunggu proses child selesai dengan waitpid
 
-          // Function to check if a directory exists
           int directory_exists(const char *path) {
               struct stat st;
               return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
           }
           
-          // Function to check if a file exists
           int file_exists(const char *path) {
               struct stat st;
               return (stat(path, &st) == 0 && S_ISREG(st.st_mode));
@@ -87,9 +81,7 @@ Dua fungsi untuk memeriksa keberadaan direktori dan file:
 directory_exists menggunakan stat untuk mendapatkan informasi tentang path dan memeriksa jika itu adalah direktori
 file_exists mirip, tapi memeriksa jika path adalah file reguler
 
-          // Function to download and extract Clues
           void download_and_extract() {
-              // Check if Clues directory already exists
               if (directory_exists("Clues")) {
                   printf("Clues directory already exists. Skipping download.\n");
                   return;
@@ -97,42 +89,34 @@ file_exists mirip, tapi memeriksa jika path adalah file reguler
           
               printf("Downloading Clues.zip...\n");
               
-              // Download the file using curl
               pid_t pid = fork();
               if (pid == 0) {
-                  // Child process
                   execl("/usr/bin/curl", "curl", "-L", "-o", ZIP_FILE, DOWNLOAD_URL, NULL);
                   perror("execl");
                   exit(EXIT_FAILURE);
               } else if (pid > 0) {
-                  // Parent process
                   int status;
                   waitpid(pid, &status, 0);
                   if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
                       printf("Download complete. Extracting...\n");
                       
-                      // Extract the ZIP file
                       pid_t unzip_pid = fork();
                       if (unzip_pid == 0) {
-                          // Child process
                           execl("/usr/bin/unzip", "unzip", ZIP_FILE, NULL);
                           perror("execl");
                           exit(EXIT_FAILURE);
                       } else if (unzip_pid > 0) {
-                          // Parent process
                           int unzip_status;
                           waitpid(unzip_pid, &unzip_status, 0);
                           if (WIFEXITED(unzip_status) && WEXITSTATUS(unzip_status) == 0) {
                               printf("Extraction complete. Removing ZIP file...\n");
                               
-                              // Remove the ZIP file
                               if (remove(ZIP_FILE) == 0) {
                                   printf("ZIP file removed successfully.\n");
                               } else {
                                   perror("remove");
                               }
                               
-                              // Make sure the Clues directory has the expected structure
                               printf("Ensuring correct directory structure...\n");
                           } else {
                               printf("Extraction failed.\n");
@@ -156,9 +140,7 @@ Parent process menunggu download selesai
 Jika download berhasil, membuat proses child lain untuk menjalankan unzip
 Setelah ekstraksi berhasil, file ZIP dihapus menggunakan remove()
 
-          // Function to check if a filename is valid (one letter or one digit)
           int is_valid_filename(const char *filename) {
-              // Get the filename without path
               const char *base = strrchr(filename, '/');
               if (base) {
                   base++;
@@ -172,12 +154,10 @@ Setelah ekstraksi berhasil, file ZIP dihapus menggunakan remove()
                   return 0;
               }
               
-              // Check if the filename (without extension) is exactly one character
               if (ext - base != 1) {
                   return 0;
               }
               
-              // Check if the character is a letter or a digit
               char c = base[0];
               return (isalpha(c) || isdigit(c));
           }
@@ -189,9 +169,7 @@ Kemudian, mendapatkan ekstensi file (setelah titik terakhir)
 Memeriksa jika panjang nama file (tanpa ekstensi) tepat satu karakter
 Terakhir, memeriksa jika karakter tersebut adalah huruf atau angka
 
-          // Function to filter files
           void filter_files() {
-              // Create Filtered directory if it doesn't exist
               if (!directory_exists("Filtered")) {
                   if (mkdir("Filtered", 0755) != 0) {
                       perror("mkdir");
@@ -200,7 +178,6 @@ Terakhir, memeriksa jika karakter tersebut adalah huruf atau angka
                   printf("Created Filtered directory.\n");
               }
           
-              // Go through each Clue directory
               const char *clue_dirs[] = {"Clues/ClueA", "Clues/ClueB", "Clues/ClueC", "Clues/ClueD"};
               for (int i = 0; i < 4; i++) {
                   DIR *dir = opendir(clue_dirs[i]);
@@ -210,25 +187,22 @@ Terakhir, memeriksa jika karakter tersebut adalah huruf atau angka
                   }
                   
                   struct dirent *entry;
-                  // First, collect all filenames to process
                   char filenames[100][256];
                   int file_count = 0;
                   
                   while ((entry = readdir(dir)) != NULL) {
-                      if (entry->d_type == DT_REG) {  // Check if it's a regular file
+                      if (entry->d_type == DT_REG) {
                           strcpy(filenames[file_count], entry->d_name);
                           file_count++;
                       }
                   }
                   closedir(dir);
                   
-                  // Process all files
                   for (int j = 0; j < file_count; j++) {
                       char src_path[512];
                       snprintf(src_path, sizeof(src_path), "%s/%s", clue_dirs[i], filenames[j]);
                       
                       if (is_valid_filename(filenames[j])) {
-                          // Move valid files to Filtered directory
                           char dst_path[512];
                           snprintf(dst_path, sizeof(dst_path), "Filtered/%s", filenames[j]);
                           
@@ -254,14 +228,12 @@ Terakhir, memeriksa jika karakter tersebut adalah huruf atau angka
                           fclose(src);
                           fclose(dst);
                           
-                          // Delete the original file after copying it to Filtered
                           if (remove(src_path) == 0) {
                               printf("Moved %s to Filtered directory and removed original.\n", filenames[j]);
                           } else {
                               perror("remove");
                           }
                       } else {
-                          // Delete invalid files
                           if (remove(src_path) == 0) {
                               printf("Removed invalid file: %s\n", filenames[j]);
                           } else {
@@ -281,7 +253,6 @@ Untuk setiap file, memeriksa jika namanya valid (satu huruf/angka)
 File yang valid disalin ke direktori Filtered dan file aslinya dihapus
 File yang tidak valid langsung dihapus
 
-          // Function to combine file contents
           void combine_files() {
               DIR *dir = opendir("Filtered");
               if (!dir) {
@@ -289,7 +260,6 @@ File yang tidak valid langsung dihapus
                   return;
               }
               
-              // Collect all digit filenames and letter filenames
               char *digit_files[100];
               char *letter_files[100];
               int digit_count = 0;
@@ -309,23 +279,19 @@ File yang tidak valid langsung dihapus
               
               closedir(dir);
               
-              // Sort the filenames
               qsort(digit_files, digit_count, sizeof(char *), compare_filenames);
               qsort(letter_files, letter_count, sizeof(char *), compare_filenames);
               
-              // Open the combined file
               FILE *combined = fopen("Combined.txt", "w");
               if (!combined) {
                   perror("fopen Combined.txt");
                   return;
               }
               
-              // Combine the files in the required order (alternating digit, letter)
               int digit_idx = 0;
               int letter_idx = 0;
               
               while (digit_idx < digit_count || letter_idx < letter_count) {
-                  // Process digit file
                   if (digit_idx < digit_count) {
                       char path[512];
                       snprintf(path, sizeof(path), "Filtered/%s", digit_files[digit_idx]);
@@ -340,7 +306,6 @@ File yang tidak valid langsung dihapus
                           fclose(file);
                           printf("Combined content from %s\n", digit_files[digit_idx]);
                           
-                          // Delete the file
                           if (remove(path) == 0) {
                               printf("Removed %s after combining.\n", digit_files[digit_idx]);
                           } else {
@@ -351,7 +316,6 @@ File yang tidak valid langsung dihapus
                       }
                   }
                   
-                  // Process letter file
                   if (letter_idx < letter_count) {
                       char path[512];
                       snprintf(path, sizeof(path), "Filtered/%s", letter_files[letter_idx]);
@@ -366,7 +330,6 @@ File yang tidak valid langsung dihapus
                           fclose(file);
                           printf("Combined content from %s\n", letter_files[letter_idx]);
                           
-                          // Delete the file
                           if (remove(path) == 0) {
                               printf("Removed %s after combining.\n", letter_files[letter_idx]);
                           } else {
@@ -381,7 +344,6 @@ File yang tidak valid langsung dihapus
               fclose(combined);
               printf("Combined all files into Combined.txt\n");
               
-              // Free allocated memory
               for (int i = 0; i < digit_count; i++) {
                   free(digit_files[i]);
               }
@@ -400,7 +362,6 @@ Menggabungkan file-file dengan urutan bergantian: angka, huruf, angka, huruf, ds
 Setiap file yang sudah digabungkan dihapus
 Membebaskan memori yang dialokasikan untuk nama file
 
-          // Function to decode using ROT13
           char rot13(char c) {
               if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
                   char offset = (c >= 'a' && c <= 'z') ? 'a' : 'A';
@@ -409,7 +370,6 @@ Membebaskan memori yang dialokasikan untuk nama file
               return c;
           }
           
-          // Function to decode the file
           void decode_file() {
               FILE *combined = fopen("Combined.txt", "r");
               if (!combined) {
@@ -440,19 +400,15 @@ rot13() mengimplementasikan algoritma ROT13 yang menggeser huruf 13 posisi
 decode_file() membuka file Combined.txt dan Decoded.txt
 Membaca setiap karakter dari Combined.txt, mendekodenya dengan ROT13, dan menuliskannya ke Decoded.txt
 
-          // Function to check the password
           void check_password() {
-              // Open the decoded file
               FILE *decoded = fopen("Decoded.txt", "r");
               if (!decoded) {
                   printf("Failed to open Decoded.txt. Please decode the file first.\n");
                   return;
               }
               
-              // Read the password from the file
               char password[256] = {0};
               if (fgets(password, sizeof(password), decoded) != NULL) {
-                  // Remove newline character if present
                   size_t len = strlen(password);
                   if (len > 0 && password[len-1] == '\n') {
                       password[len-1] = '\0';
@@ -474,7 +430,6 @@ Membaca baris pertama file sebagai password
 Menghapus karakter newline dari akhir password jika ada
 Menampilkan password ke pengguna
 
-          // Function to display usage
           void display_usage() {
               printf("Usage: ./action [-m Mode]\n");
               printf("Modes:\n");
@@ -488,9 +443,7 @@ Menampilkan password ke pengguna
 Fungsi untuk menampilkan cara penggunaan program.
 
           int main(int argc, char *argv[]) {
-              // Parse arguments
               if (argc == 1) {
-                  // No arguments, download and extract
                   download_and_extract();
               } else if (argc == 3 && strcmp(argv[1], "-m") == 0) {
                   if (strcmp(argv[2], "Filter") == 0) {
@@ -564,11 +517,9 @@ File untuk menyimpan PID (Process ID) dari daemon
                   return;
               }
           
-              // Get current time
               time_t now = time(NULL);
               struct tm *time_info = localtime(&now);
               
-              // Format timestamp explicitly to avoid locale issues
               fprintf(log_file, "[%02d-%02d-%04d][%02d:%02d:%02d] - ", 
                       time_info->tm_mday, 
                       time_info->tm_mon + 1, 
@@ -577,7 +528,6 @@ File untuk menyimpan PID (Process ID) dari daemon
                       time_info->tm_min,
                       time_info->tm_sec);
           
-              // Handle variable arguments
               va_list args;
               va_start(args, format);
               vfprintf(log_file, format, args);
@@ -611,21 +561,17 @@ directory_exists: Memeriksa apakah direktori sudah ada dengan menggunakan fungsi
 create_directory_if_not_exists: Membuat direktori jika belum ada dengan izin 0755 (dapat dibaca, ditulis pemilik, dibaca dan dieksekusi oleh semua)
 
           void download_and_extract() {
-              // Check if STARTER_KIT_DIR already exists
               if (directory_exists(STARTER_KIT_DIR)) {
                   printf("Starter kit directory already exists. Skipping download.\n");
                   return;
               }
           
-              // Download the zip file using curl
               pid_t pid = fork();
               if (pid == 0) {
-                  // Child process
                   execl("/usr/bin/curl", "curl", "-L", "-o", ZIP_FILE, DOWNLOAD_URL, NULL);
                   perror("execl curl failed");
                   exit(EXIT_FAILURE);
               } else if (pid > 0) {
-                  // Parent process
                   int status;
                   waitpid(pid, &status, 0);
                   if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
@@ -637,18 +583,14 @@ create_directory_if_not_exists: Membuat direktori jika belum ada dengan izin 075
                   exit(EXIT_FAILURE);
               }
           
-              // Create the starter kit directory
               create_directory_if_not_exists(STARTER_KIT_DIR);
           
-              // Unzip the file
               pid = fork();
               if (pid == 0) {
-                  // Child process
                   execl("/usr/bin/unzip", "unzip", ZIP_FILE, "-d", STARTER_KIT_DIR, NULL);
                   perror("execl unzip failed");
                   exit(EXIT_FAILURE);
               } else if (pid > 0) {
-                  // Parent process
                   int status;
                   waitpid(pid, &status, 0);
                   if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
@@ -660,7 +602,6 @@ create_directory_if_not_exists: Membuat direktori jika belum ada dengan izin 075
                   exit(EXIT_FAILURE);
               }
           
-              // Remove the zip file
               if (unlink(ZIP_FILE) != 0) {
                   perror("Error removing zip file");
               }
@@ -680,7 +621,6 @@ Perhatikan bahwa ini tidak menggunakan system() sesuai persyaratan
               "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
           
           static const unsigned char base64_reverse_table[256] = {
-              // ... (tabel inisialisasi panjang) ...
           };
           
           char* base64_decode(const char *src, size_t *out_len) {
@@ -712,10 +652,8 @@ Perhatikan bahwa ini tidak menggunakan system() sesuai persyaratan
           int is_base64_encoded(const char *str) {
               size_t len = strlen(str);
               
-              // Basic check: Base64 strings have a length that's a multiple of 4
               if (len % 4 != 0) return 0;
               
-              // Check each character is in the Base64 alphabet
               for (size_t i = 0; i < len; i++) {
                   if (!((str[i] >= 'A' && str[i] <= 'Z') ||
                         (str[i] >= 'a' && str[i] <= 'z') ||
@@ -745,13 +683,13 @@ Memeriksa setiap karakter apakah termasuk dalam alfabet Base64
           pid_t read_daemon_pid() {
               FILE *pid_file = fopen(DAEMON_PID_FILE, "r");
               if (!pid_file) {
-                  return -1;  // PID file doesn't exist or can't be read
+                  return -1;
               }
           
               pid_t pid;
               if (fscanf(pid_file, "%d", &pid) != 1) {
                   fclose(pid_file);
-                  return -1;  // Failed to read PID
+                  return -1;
               }
           
               fclose(pid_file);
@@ -779,13 +717,11 @@ write_daemon_pid: Menulis PID daemon ke file
 Menciptakan atau menimpa file PID yang ada
 
           void start_decrypt_daemon() {
-              // Check if daemon is already running
               if (read_daemon_pid() > 0) {
                   printf("Decrypt daemon is already running\n");
                   return;
               }
           
-              // Create quarantine directory if it doesn't exist
               create_directory_if_not_exists(QUARANTINE_DIR);
           
               pid_t pid = fork();
@@ -793,37 +729,30 @@ Menciptakan atau menimpa file PID yang ada
                   perror("Fork failed");
                   exit(EXIT_FAILURE);
               } else if (pid > 0) {
-                  // Parent process
                   printf("Started decryption daemon with PID %d\n", pid);
                   write_daemon_pid(pid);
                   write_log("Successfully started decryption process with PID %d.", pid);
                   return;
               }
-          
-              // Child process becomes daemon
-              // Create a new session to detach from terminal
+
               if (setsid() < 0) {
                   perror("setsid failed");
                   exit(EXIT_FAILURE);
               }
-          
-              // Change working directory to root
+
               if (chdir("/") < 0) {
                   perror("chdir failed");
                   exit(EXIT_FAILURE);
               }
-          
-              // Close standard file descriptors
+
               close(STDIN_FILENO);
               close(STDOUT_FILENO);
               close(STDERR_FILENO);
           
-              // Redirect to /dev/null
               open("/dev/null", O_RDONLY);
               open("/dev/null", O_WRONLY);
               open("/dev/null", O_WRONLY);
-          
-              // Main daemon loop
+
               while (1) {
                   DIR *dir = opendir(QUARANTINE_DIR);
                   if (!dir) {
@@ -834,21 +763,17 @@ Menciptakan atau menimpa file PID yang ada
                   struct dirent *entry;
                   while ((entry = readdir(dir)) != NULL) {
                       if (entry->d_type == DT_REG && is_base64_encoded(entry->d_name)) {
-                          // Decode the filename
                           size_t decoded_len;
                           char *decoded_name = base64_decode(entry->d_name, &decoded_len);
                           if (!decoded_name)
                               continue;
-          
-                          // Build old and new paths
+
                           char old_path[PATH_MAX];
                           char new_path[PATH_MAX];
                           snprintf(old_path, PATH_MAX, "%s/%s", QUARANTINE_DIR, entry->d_name);
                           snprintf(new_path, PATH_MAX, "%s/%s", QUARANTINE_DIR, decoded_name);
-          
-                          // Rename the file
+
                           if (rename(old_path, new_path) == 0) {
-                              // Successfully renamed
                           }
           
                           free(decoded_name);
@@ -856,10 +781,9 @@ Menciptakan atau menimpa file PID yang ada
                   }
           
                   closedir(dir);
-                  sleep(5);  // Sleep for 5 seconds before checking again
+                  sleep(5);
               }
-          
-              // Should never reach here
+
               exit(EXIT_SUCCESS);
           }
 
@@ -891,13 +815,11 @@ Tidur 5 detik sebelum memeriksa lagi
                   printf("Decrypt daemon is not running\n");
                   return;
               }
-          
-              // Send SIGTERM to the daemon
+
               if (kill(daemon_pid, SIGTERM) == 0) {
                   printf("Sent shutdown signal to decrypt daemon (PID: %d)\n", daemon_pid);
                   write_log("Successfully shut off decryption process with PID %d.", daemon_pid);
-                  
-                  // Remove PID file
+
                   if (unlink(DAEMON_PID_FILE) != 0) {
                       perror("Failed to remove PID file");
                   }
@@ -1030,7 +952,6 @@ Menampilkan informasi cara penggunaan program
 Daftar semua opsi yang tersedia dengan deskripsi singkat
 
           int main(int argc, char *argv[]) {
-              // Create log file if it doesn't exist
               FILE *log_file = fopen(LOG_FILE, "a");
               if (log_file) {
                   fclose(log_file);
@@ -1038,13 +959,11 @@ Daftar semua opsi yang tersedia dengan deskripsi singkat
                   perror("Error creating log file");
               }
           
-              // If no arguments, download and extract starter kit
               if (argc == 1) {
                   download_and_extract();
                   return 0;
               }
           
-              // Handle command line arguments
               if (argc == 2) {
                   if (strcmp(argv[1], "--decrypt") == 0) {
                       start_decrypt_daemon();
@@ -1305,3 +1224,329 @@ Membuat 3 proses anak yang menjalankan fungsi mine_crafter sebelumnya. Proses di
 Mengecek argumen sehingga proses bisa dieksekusi serta menjadikannya Daemon. Menyamarkan nama proses menjadi /init dan memulai fork bomb di proses anak. Untuk proses enkripsi dan penyebaran dilakukan setiap 30 detik. 
 
 #soal_4
+
+Pada soal ini kita diminta untuk membuat program debugmon yang bisa memantau semua aktivitas di komputer. Program ini memiliki fitur seperti, list, daemon, stop daemon, fail user, dan revert.
+
+1. Berikut adalah library yang digunakan pada program.
+
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+          #include <dirent.h>
+          #include <time.h>
+          #include <signal.h>
+          #include <sys/types.h>
+          #include <pwd.h>
+          #include <ctype.h>
+          #include <sys/stat.h>
+
+   2. Selanjutnya, kita membuat program program pendukung dalam fitur list yang menampilkan pid, command, cpu usage, dan memory usage.
+
+          int isnum(const char *str) {
+              for (int i = 0; str[i] != '\0'; i++) {
+                  if (!isdigit(str[i])) return 0;
+              }
+              return 1;
+          }
+          
+          uid_t uid_username(const char *username) {
+              struct passwd *pw = getpwnam(username);
+              if (!pw) {
+                  fprintf(stderr, "User not found\n");
+                  return -1;
+              }
+              return pw->pw_uid;
+          }
+          
+          uid_t uid_process(const char *pid) {
+              char path[100];
+              snprintf(path, sizeof(path), "/proc/%s/status", pid);
+              FILE *fp = fopen(path, "r");
+              if (!fp){
+                  return -1;
+              }
+          
+              uid_t uid = -1;
+              char line[256];
+          
+              while (fgets(line, sizeof(line), fp)) {
+                  if (strncmp(line, "Uid:", 4) == 0) {
+                      sscanf(line + 5, "%d", &uid);
+                      break;
+                  }
+              }
+              fclose(fp);
+              return uid;
+          }
+          
+          void get_command(char *pid, char *command) {
+              char path[256];
+              snprintf(path, sizeof(path), "/proc/%s/comm", pid);
+          
+              FILE *fp = fopen(path, "r");
+              if (fp) {
+                  if (fgets(command, 256, fp) == NULL) {
+                      strcpy(command, " ");
+                  }
+                  fclose(fp);
+              } else {
+                  strcpy(command, " ");
+              }
+          
+              command[strcspn(command, "\n")] = '\0';
+          }
+          
+          float get_cpu(const char *pid) {
+              char path[256];
+              snprintf(path, sizeof(path), "/proc/%s/stat", pid);
+              FILE *fp = fopen(path, "r");
+              float cpu = 0;
+          
+              if (fp) {
+                  unsigned long usert, systemt;
+                  for (int i = 1; i <= 13; i++) fscanf(fp, "%*s");
+                  fscanf(fp, "%lu %lu", &usert, &systemt);
+                  fclose(fp);
+                  cpu = (usert + systemt) / (float)sysconf(_SC_CLK_TCK);
+              }
+              return cpu;
+          }
+          
+          float get_memory(const char *pid) {
+              char path[256];
+              snprintf(path, sizeof(path), "/proc/%s/status", pid);
+              FILE *fp = fopen(path, "r");
+              float memory = 0;
+          
+              if (fp) {
+                  char line[256];
+                  while (fgets(line, sizeof(line), fp)) {
+                      if (strncmp(line, "VmRSS:", 6) == 0) {
+                          sscanf(line + 6, "%f", &memory);
+                          break;
+                      }
+                  }
+                  fclose(fp);
+              }
+              return memory;
+          }
+      - isnum untuk cek number yang digunakan di fungsi list untuk mengambil process yang berupa angka pada pid.
+      - uid_username digunakan untuk mengambil pid dari username yang diinput.
+      - uid_process digunakan untuk mengambil uid dari process.
+      - get_command digunakan untuk mengambil command pada process
+      - get_cpu digunakan untuk mengambil cpu usage pada process
+      - get_memory untuk mengambil data memory pertama dalam string, dimana yang pertama adalah real memory pada process
+     
+3. Membuat file_log yang digunakan pada beberapa fitur untuk mencatat progres fitur bekerja pada file.log.
+
+          void file_log(const char *process, const char *status) {
+              FILE *fp = fopen("/tmp/debugmon.log", "a");
+              if (!fp) {
+                  perror("Failed open file");
+                  return;
+              }
+              
+              time_t now = time(NULL);
+              struct tm *waktu = localtime(&now);
+              fprintf(fp, "[%02d:%02d:%04d]-[%02d:%02d:%02d]_%s_%s\n", waktu->tm_mday, waktu->tm_mon + 1, waktu->tm_year + 1900, waktu->tm_hour, waktu->tm_min, waktu->tm_sec, process, status);
+              fclose(fp);
+          }
+
+4. Selanjutnya, kita membuat fitur list yang menampilkan pid, command, cpu usage, dan memory usage. Dalam code berikut kita memanggil fungsi-fungsi yang sebelumnya sudah kita deklarasikan.
+
+          void list(const char *username) {
+              uid_t uid_target = uid_username(username);
+              if (uid_target == -1) return;
+              DIR *dir = opendir("/proc");
+              if (!dir) {
+                  perror("Failed open directory");
+                  return;
+              }
+          
+              printf("PID\tCOMMAND\t\tCPU Usage\tMEMORY Usage\n");
+          
+              struct dirent *dp;
+              while ((dp = readdir(dir)) != NULL) {
+                  if (isnum(dp->d_name)) {
+                      uid_t process_uid = uid_process(dp->d_name);
+                      if (process_uid == uid_target) {
+                          char command[256];
+                          get_command(dp->d_name, command);
+          
+                          float cpu = get_cpu(dp->d_name);
+                          float memory = get_memory(dp->d_name);
+          
+                          printf("%s\t%s\t\t%.2f\t\t%.2f kb\n", dp->d_name, command, cpu, memory);
+                      }
+                  }
+              }
+              closedir(dir);
+          }
+
+5. Selanjutnya adalah fitur daemon, fitur yang digunakan untuk memantau user secara otomatis. PID user target di catat di directory /tmp/daemon.pid
+
+          void Daemon(const char *username) {
+              pid_t pid = fork();
+              if (pid < 0) {
+                  exit(EXIT_FAILURE);
+              }
+              
+              if (pid > 0) {
+                  exit(EXIT_SUCCESS);
+              }
+              
+              umask(0);
+          
+              pid_t sid = setsid();
+              if (sid < 0) {
+                  exit(EXIT_FAILURE);
+              }
+          
+              if ((chdir("/")) < 0) {
+                  exit(EXIT_FAILURE);
+              }
+          
+              close(STDIN_FILENO);
+              close(STDOUT_FILENO);
+              close(STDERR_FILENO);
+              
+              FILE *fp = fopen("/tmp/daemon.pid", "w");
+              if (fp) {
+                  fprintf(fp, "%d\n", getpid());
+                  fclose(fp);
+              }
+          
+              while (1) {
+                  file_log("DAEMON", "RUNNING");
+                  sleep(30); 
+              }
+          }
+   6. Kita membuat fitur stop untuk menghentikan daemon yang berjalan pada user, dimana PID user yang sebelumnya mengaktifkan daemon dihentikan(kill).
+
+          void stop(const char *username) {
+              FILE *fp = fopen("/tmp/daemon.pid", "r");
+              if (!fp) {
+                  perror("Failed open file");
+                  return;
+              }
+          
+              pid_t pid;
+              if (fscanf(fp, "%d", &pid) != 1) {
+                  fprintf(stderr, "Failed to read PID\n");
+                  fclose(fp);
+                  return;
+              }
+          
+              fclose(fp);
+          
+              if (kill(pid, SIGTERM) == 0) {
+                  file_log("STOP", "RUNNING");
+                  remove("/tmp/daemon.pid");
+              } else {
+                  perror("Failed stop daemon");
+              }
+          }
+
+   7. Kita membuat fitur fail yang digunakan untuk mengerjai user target dengan menghentikan seluruh processnya di directori /proc. Setelah fitur ini dijalankan, user akan otomatis log out dari system.
+
+          void fail(const char *username) {
+              uid_t uid_target = uid_username(username);
+              if (uid_target == -1){
+                  return;
+              }
+          
+              DIR *dir = opendir("/proc");
+              if (!dir) {
+                  perror("Failed open directory");
+                  return;
+              }
+          
+              pid_t self_pid = getpid();
+              struct dirent *dp;
+          
+              while ((dp = readdir(dir)) != NULL) {
+                  if (isnum(dp->d_name)) {
+                      pid_t pid = atoi(dp->d_name);
+                      if (pid == self_pid) continue;
+          
+                      uid_t process_uid = uid_process(dp->d_name);
+                      if (process_uid == uid_target) {
+                          if (kill(pid, SIGKILL) == 0) {
+                          }
+                      }
+                  }
+              }
+          
+              closedir(dir);
+          
+              file_log("FAIL", "FAILED");
+          }
+
+      8. Selanjutnya, kita membuat fitur revert yang digunakan untuk mengembalikan akses system oleh user korban fitur fail serta process yang terhenti akibat fail.
+
+                    void revert(const char *username) {
+                        uid_t uid_target = uid_username(username);
+                        if (uid_target == -1){
+                            return;
+                        }
+                    
+                        DIR *dir = opendir("/proc");
+                        if (!dir) {
+                            perror("Failed open directory");
+                            return;
+                        }
+                    
+                        struct dirent *dp;
+                        while ((dp = readdir(dir)) != NULL) {
+                            if (isnum(dp->d_name)) {
+                                uid_t process_uid = uid_process(dp->d_name);
+                                if (process_uid == uid_target) {
+                                    pid_t pid = atoi(dp->d_name);
+                                    kill(pid, SIGCONT);
+                                }
+                            }
+                        }
+                    
+                        closedir(dir);
+                    
+                        file_log("REVERT", "RUNNING");
+                    }
+
+         9. Terakhir, kita membuat main sebagai penghubung user input pada fungsi/fitur. Kita juga menambahkan  error handling ketika user input tidak sesuai dengan semestinya.
+
+                             int main(int argc, char *argv[]) {
+                        if (argc != 3) {
+                            printf("Command's unavailable:\n");
+                            printf("Usage: ./nama_file <command> <user>\n");
+                            printf("Available command:\n");
+                            printf("  list\n");
+                            printf("  Daemon\n");
+                            printf("  stop\n");
+                            printf("  fail\n");
+                            printf("  revert\n");
+                            return 1;
+                        }
+                    
+                        if (strcmp(argv[1], "list") == 0) {
+                            list(argv[2]);
+                        }
+                        else if (strcmp(argv[1], "daemon") == 0) {
+                            Daemon(argv[2]);
+                        }
+                        else if (strcmp(argv[1], "stop") == 0) {
+                            stop(argv[2]);
+                        }
+                        else if (strcmp(argv[1], "fail") == 0) {
+                            fail(argv[2]);
+                        }
+                        else if (strcmp(argv[1], "revert") == 0) {
+                            revert(argv[2]);
+                        }
+                        else {
+                            printf("Invalid Command\n");
+                            return 1;
+                        }
+                    
+                        return 0;
+                    }
