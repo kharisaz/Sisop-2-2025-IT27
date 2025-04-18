@@ -1241,7 +1241,7 @@ Pada soal ini kita diminta untuk membuat program debugmon yang bisa memantau sem
           #include <ctype.h>
           #include <sys/stat.h>
 
-   2. Selanjutnya, kita membuat program program pendukung dalam fitur list yang menampilkan pid, command, cpu usage, dan memory usage.
+2. Selanjutnya, kita membuat program program pendukung dalam fitur list yang menampilkan pid, command, cpu usage, dan memory usage.
 
           int isnum(const char *str) {
               for (int i = 0; str[i] != '\0'; i++) {
@@ -1422,7 +1422,8 @@ Pada soal ini kita diminta untuk membuat program debugmon yang bisa memantau sem
                   sleep(30); 
               }
           }
-   6. Kita membuat fitur stop untuk menghentikan daemon yang berjalan pada user, dimana PID user yang sebelumnya mengaktifkan daemon dihentikan(kill).
+
+6. Kita membuat fitur stop untuk menghentikan daemon yang berjalan pada user, dimana PID user yang sebelumnya mengaktifkan daemon dihentikan(kill).
 
           void stop(const char *username) {
               FILE *fp = fopen("/tmp/daemon.pid", "r");
@@ -1448,7 +1449,7 @@ Pada soal ini kita diminta untuk membuat program debugmon yang bisa memantau sem
               }
           }
 
-   7. Kita membuat fitur fail yang digunakan untuk mengerjai user target dengan menghentikan seluruh processnya di directori /proc. Setelah fitur ini dijalankan, user akan otomatis log out dari system.
+7. Kita membuat fitur fail yang digunakan untuk mengerjai user target dengan menghentikan seluruh processnya di directori /proc. Setelah fitur ini dijalankan, user akan otomatis log out dari system.
 
           void fail(const char *username) {
               uid_t uid_target = uid_username(username);
@@ -1483,7 +1484,7 @@ Pada soal ini kita diminta untuk membuat program debugmon yang bisa memantau sem
               file_log("FAIL", "FAILED");
           }
 
-      8. Selanjutnya, kita membuat fitur revert yang digunakan untuk mengembalikan akses system oleh user korban fitur fail serta process yang terhenti akibat fail.
+8. Selanjutnya, kita membuat fitur revert yang digunakan untuk mengembalikan akses system oleh user korban fitur fail serta process yang terhenti akibat fail.
 
                     void revert(const char *username) {
                         uid_t uid_target = uid_username(username);
@@ -1513,7 +1514,7 @@ Pada soal ini kita diminta untuk membuat program debugmon yang bisa memantau sem
                         file_log("REVERT", "RUNNING");
                     }
 
-         9. Terakhir, kita membuat main sebagai penghubung user input pada fungsi/fitur. Kita juga menambahkan  error handling ketika user input tidak sesuai dengan semestinya.
+9. Terakhir, kita membuat main sebagai penghubung user input pada fungsi/fitur. Kita juga menambahkan  error handling ketika user input tidak sesuai dengan semestinya.
 
                              int main(int argc, char *argv[]) {
                         if (argc != 3) {
