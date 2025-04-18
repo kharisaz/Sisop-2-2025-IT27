@@ -195,7 +195,7 @@ void stop(const char *username) {
     fclose(fp);
 
     if (kill(pid, SIGTERM) == 0) {
-        file_log(username, "STOP", "RUNNING");
+        file_log("STOP", "RUNNING");
         remove("/tmp/debugmon_daemon.pid");
     } else {
         perror("Failed stop daemon");
