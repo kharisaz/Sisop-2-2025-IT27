@@ -20,7 +20,7 @@ int isnum(const char *str) {
 uid_t uid_username(const char *username) {
     struct passwd *pw = getpwnam(username);
     if (!pw) {
-        fprintf(stderr, "User not found");
+        fprintf(stderr, "User not found\n");
         return -1;
     }
     return pw->pw_uid;
@@ -53,7 +53,7 @@ void get_command(char *pid, char *command) {
 
     FILE *fp = fopen(path, "r");
     if (fp) {
-        if (fgets(command, sizeof(command), fp) == NULL) {
+        if (fgets(command, 256, fp) == NULL) {
             strcpy(command, " ");
         }
         fclose(fp);
@@ -196,7 +196,7 @@ void stop(const char *username) {
 
     if (kill(pid, SIGTERM) == 0) {
         file_log("STOP", "RUNNING");
-        remove("/tmp/debugmon_daemon.pid");
+        remove("/tmp/daemon.pid");
     } else {
         perror("Failed stop daemon");
     }
@@ -292,7 +292,7 @@ int main(int argc, char *argv[]) {
         revert(argv[2]);
     }
     else {
-        printf("Unvalid Command\n");
+        printf("Invalid Command\n");
         return 1;
     }
 
