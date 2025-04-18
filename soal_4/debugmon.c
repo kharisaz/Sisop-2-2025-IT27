@@ -99,7 +99,7 @@ float get_memory(const char *pid) {
     return memory;
 }
 
-void file_log(const char *username, const char *process, const char *status) {
+void file_log(const char *process, const char *status) {
     FILE *fp = fopen("/tmp/debugmon.log", "a");
     if (!fp) {
         perror("Failed open file");
@@ -108,7 +108,7 @@ void file_log(const char *username, const char *process, const char *status) {
     
     time_t now = time(NULL);
     struct tm *waktu = localtime(&now);
-    fprintf(fp, "[%02d:%02d:%04d]-[%02d:%02d:%02d]_%s_%s_%s\n", waktu->tm_mday, waktu->tm_mon + 1, waktu->tm_year + 1900, waktu->tm_hour, waktu->tm_min, waktu->tm_sec, username, process, status);
+    fprintf(fp, "[%02d:%02d:%04d]-[%02d:%02d:%02d]_%s_%s\n", waktu->tm_mday, waktu->tm_mon + 1, waktu->tm_year + 1900, waktu->tm_hour, waktu->tm_min, waktu->tm_sec, process, status);
     fclose(fp);
 }
 
@@ -173,7 +173,7 @@ void Daemon(const char *username) {
     }
 
     while (1) {
-        file_log(username, "DAEMON", "RUNNING");
+        file_log("DAEMON", "RUNNING");
         sleep(30); 
     }
 }
@@ -214,23 +214,25 @@ void fail(const char *username) {
         return;
     }
 
+    pid_t self_pid = getpid();
     struct dirent *dp;
+
     while ((dp = readdir(dir)) != NULL) {
         if (isnum(dp->d_name)) {
+            pid_t pid = atoi(dp->d_name);
+            if (pid == self_pid) continue;
+
             uid_t process_uid = uid_process(dp->d_name);
             if (process_uid == uid_target) {
-                char proc_name[256];
-                get_command(dp->d_name, proc_name);
-                if (strcmp(proc_name, "debugmon") != 0) {
-                    pid_t pid = atoi(dp->d_name);
-                    if (kill(pid, SIGSTOP) == 0) {
-                        file_log(username, proc_name, "FAILED");
-                    }
+                if (kill(pid, SIGKILL) == 0) {
                 }
             }
         }
     }
+
     closedir(dir);
+
+    file_log("FAIL", "FAILED");
 }
 
 void revert(const char *username) {
@@ -250,18 +252,15 @@ void revert(const char *username) {
         if (isnum(dp->d_name)) {
             uid_t process_uid = uid_process(dp->d_name);
             if (process_uid == uid_target) {
-                char proc_name[256];
-                get_command(dp->d_name, proc_name);
-                if (strcmp(proc_name, "debugmon") != 0) {
-                    pid_t pid = atoi(dp->d_name);
-                    if (kill(pid, SIGCONT) == 0) {
-                        file_log(username, proc_name, "RUNNING");
-                    }
-                }
+                pid_t pid = atoi(dp->d_name);
+                kill(pid, SIGCONT);
             }
         }
     }
+
     closedir(dir);
+
+    file_log("REVERT", "RUNNING");
 }
 
 int main(int argc, char *argv[]) {
